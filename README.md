@@ -1,5 +1,8 @@
 # asyncio by example
 
+Asyncio is una librería para escribir código concurrente usando la sintaxis **async/await**.
+
+
 
 
 Para iniciar primero necesitaras habilitar un ambiente de trabajo, para ello usaremos contenedores de Docker.

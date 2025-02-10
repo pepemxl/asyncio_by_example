@@ -26,10 +26,14 @@ Este módulo es útil para manejar múltiples tareas de I/O (entrada/salida), co
 4. **Ideal para Aplicaciones de Red**
    - Servidores web como **FastAPI** o bibliotecas como **aiohttp** dependen de `asyncio` para manejar muchas solicitudes concurrentes sin bloquear el programa.
 
-### **Ejemplo Básico de asyncio**
+### **Ejemplo de asyncio**
+
+Podemos ver como en el siguiente código el tiempo utilizado en la versicón asincrónica es alrededor de 2 segundos, mientras que su version serial le toma alrededor de 4 segundos!
 
 ```python
 import asyncio
+import time
+
 
 # async def: Define una función asíncrona.
 async def tarea():
@@ -42,6 +46,61 @@ async def main():
     # asyncio.gather(): Ejecuta múltiples tareas en paralelo.
     await asyncio.gather(tarea(), tarea())  # Ejecuta dos tareas en paralelo
 
-# asyncio.run(main()): Inicia el loop de eventos.
-asyncio.run(main())
+
+if __name__ == '__main__':
+    start = time.time()
+    # asyncio.run(main()): Inicia el loop de eventos.
+    asyncio.run(main())
+    end = time.time()
+    print("Tiempo usado: ", end-start)
 ```
+
+#### Salida
+
+```bash
+Inicio de tarea
+Inicio de tarea
+Tarea completada
+Tarea completada
+Tiempo usado:  2.0031697750091553
+```
+
+### **Ejemplo de código sincrónico**
+
+```python
+import time
+
+
+def tarea():
+    print("Inicio de tarea")
+    time.sleep(2)
+    print("Tarea completada")
+
+def main():
+    tarea()
+    tarea()
+
+
+if __name__ == '__main__':
+    start = time.time()
+    main()
+    end = time.time()
+    print("Tiempo usado: ", end-start)
+```
+
+#### Salida
+
+```bash
+Inicio de tarea
+Tarea completada
+Inicio de tarea
+Tarea completada
+Tiempo usado:  4.004451036453247
+```
+
+
+A alto nivel asyncio proporciona APIs para trabajar con **coroutines** y **tasks**.
+
+## Coroutines
+
+Las Coroutines se declaran con la sintaxis async/await.
