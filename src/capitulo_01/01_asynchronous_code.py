@@ -1,4 +1,6 @@
 import asyncio
+import time
+
 
 # async def: Define una función asíncrona.
 async def tarea():
@@ -11,5 +13,10 @@ async def main():
     # asyncio.gather(): Ejecuta múltiples tareas en paralelo.
     await asyncio.gather(tarea(), tarea())  # Ejecuta dos tareas en paralelo
 
-# asyncio.run(main()): Inicia el loop de eventos.
-asyncio.run(main())
+
+if __name__ == '__main__':
+    start = time.time()
+    # asyncio.run(main()): Inicia el loop de eventos.
+    asyncio.run(main())
+    end = time.time()
+    print("Tiempo usado: ", end-start)
