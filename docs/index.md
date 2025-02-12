@@ -11,5 +11,13 @@ Para resolver este tipo de problemas fue introducida la librería **asyncio**  e
 
 Actualmente lo más común es usar multiprocessing con concurrencia en python. Por lo cual nos adentraremos en el desarollo de aplicaciones con python usando computo concurrente.
 
+Empezaremos con una de debian utilizando python 3.8 y más adelante migraremos a python 3.13, donde esperamos tener un framework más estable para multi-threading.
+
+
+Para computo concurrente utilizaremos los siguientes paquetes.
+
+- asyncio
+- greenlets
+- gevent
 
 
