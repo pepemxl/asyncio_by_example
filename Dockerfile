@@ -1,5 +1,5 @@
 # Usa una imagen oficial de Python
-FROM python:3.11
+FROM python:3.8.20
 
 # Fija el directorio de trabajo dentro del contenedor
 WORKDIR /app
@@ -7,6 +7,8 @@ WORKDIR /app
 # Copia solo el archivo de dependencias primero (para aprovechar la caché de Docker)
 COPY requirements.txt .
 
+# Actualiza pip
+RUN  pip install --upgrade pip
 # Instala las dependencias
 RUN pip install --no-cache-dir -r requirements.txt
 
