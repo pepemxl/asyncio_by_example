@@ -7,5 +7,13 @@ services:
       - ./src:/app/src  # Comparte el código entre el host y el contenedor
     ports:
       - "8888:8888"  # Para Jupyter, si lo necesitas
+      - "8000:8000"
+      - "5000:5000"
+      - "6000:6000"
+      - "6001:6001"
+      - "6002:6002"
+      - "6003:6003"
+      - "6004:6004"
+      - "6005:6005"
     stdin_open: true
     tty: true
