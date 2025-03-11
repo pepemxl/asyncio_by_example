@@ -1,26 +1,30 @@
-# # Introduccion a estructuras de datos thread safe
+# Introducción a estructuras de datos thread safe
 
-para entender este tema veremos que esta por debajo de nuestras herramientas asi que haremos un poco de código de C/C++
-
+Para entender este tema veremos que está por debajo de nuestras herramientas así que haremos un poco de código en C/C++, con lo que buscamos:
 
 - Entender los fundamentos de las estructuras de datos concurrentes
 - Implementar operaciones thread safe 
 - Analizar y resolver problemas de performance
 - Evaluar concurrent vs trade off de performance
 
-
-Antes de profundizar en el ámbito de los bloqueos, es fundamental comprender cómo integrarlos en estructuras de datos comunes para lograr la seguridad de los subprocesos. 
+Antes de profundizar en el ámbito de los bloqueos(del ingles Locks), es fundamental que comprendamos, cómo  se integrán los bloqueos a estructuras de datos comunes con el fin de lograr la seguridad de los subprocesos(**thread safe**). 
 
 Las preguntas clave aquí son:
 
 - **Cómo agregar bloqueos(Locks) de manera efectiva**: ¿Cuáles son las estrategias para agregar bloqueos a una estructura de datos para garantizar un acceso simultáneo correcto?
--- **Consideraciones de rendimiento**: ¿Cómo se pueden aplicar los bloqueos de una manera que mantenga la velocidad y permita el acceso simultáneo de varios subprocesos?
+- **Consideraciones de rendimiento**: ¿Cómo se pueden aplicar los bloqueos de una manera que mantenga la velocidad y permita el acceso simultáneo de varios subprocesos?
+- ¿Cuál es la función de una variable de condición?
+- ¿Cómo una variable de condición difiere de una variable común?
+- ¿Qué es un semaforo?
+- ¿Cómo reemplazamos locks y variables de condición con semafaros?
+- ¿Qué es un semaforo binario y como trabaja?
 
 
-Empecemos con el caso del la estructura de datos El Contador.
+## Estructura de datos para un contador
 
+Empecemos con el caso del la estructura de datos **El Contador**.
 
-Crea un Contador no concurrente de la manera más simnple sería parecido al siguiente ejemplo:
+Creando un Contador no concurrente de la manera más simnple sería algo parecido al siguiente código ejemplo:
 
 ```cpp
 typedef struct __counter_t {
@@ -44,36 +48,49 @@ int get(counter_t *c) {
 }
 ```
 
-### Observaciones
+donde tenemos la estructura de datos `counter_t` que será nuestro almacen de datos y 4 metodos que nos ayudarán respectivamente a 
 
-- Simplicidad: este contador es fácil de implementar, pero carece de seguridad para subprocesos.
-- Problemas de escalabilidad: sin sincronización, este contador no es adecuado para entornos concurrentes.
+- inicializar la estructura
+- incrementar el valor del contador
+- decrementar el valor del contador
+- obtener el valor del contador
+
+lo primero a notar es que:
+
+- Este contador es fácil de implementar, pero carece de seguridad para subprocesos.
+- Este contador tiene problemas de escalabilidad, es decir no cuenta con sincronización, por lo cual este contador no es adecuado para entornos concurrentes.
 
 ## Hagamos el contador thread safe
 
+Primero hagamos que este contador sea thread safe, para ello agregaremos un Bloqueo (Lock).
 
-Agregaremos un Lock (Bloqueo)
+### Donde se agrega el bloqueo?
 
-Para hacer el contador thread-safe vamos a agregar un lock cada vez que cualquier metodo intente manipular la información de la estructura de datos y lo liberaremos al retornar desde la llamada.
+Para hacer el contador thread-safe vamos a agregar un lock cada vez que cualquier metodo intente manipular(incrementar/decrementar) la información de la estructura de datos y lo liberaremos al retornar desde la llamada.
 
 
 Ejemplo de lock
 
 
 ```cpp
-// Pseudo codigo para el contador thread-safe 
-lock_t lock; 
+// Pseudo código para el contador thread-safe 
+lock_t lock;
 
 void increment(counter_t *c) {
     lock(&lock);
     c->value++;
     unlock(&lock);
 }
-// lo mismo para incrementar su valor u obtenerlo
+
+void decrement(counter_t *c) {
+    lock(&lock);
+    c->value--;
+    unlock(&lock);
+}
+
 ```
 
-
-## Patrón de Diseño
+## Patrón de Diseños
 
 
 The output of code in `01_example.cpp`
@@ -185,8 +202,8 @@ Veamos un ejemplo para demostrarlo:
 |3|2|0|3|1|0|
 |4|3|0|3|2|0|
 |5|4|1|3|3|0|
-|6|5->0|1|3|4|5(from L1)|
-|7|0|2|4|5->0|10(from L4)|
+|6|5->0|1|3|4|5 (de L1)|
+|7|0|2|4|5->0|10 (de L4)|
 
 
 El umbral `S` se establece en 5 en este ejemplo, y los subprocesos en cada una de las cuatro CPU están actualizando sus conteos locales L1 ... L4. A medida que el tiempo disminuye, el valor del contador global (G) también se indica en el seguimiento. Un contador local se puede incrementar en cada paso de tiempo, si el valor local alcanza el umbral S, se transfiere al contador global y el contador local se reinicia.
@@ -196,7 +213,7 @@ El rendimiento de los contadores de aproximación con un umbral `S` de 1024 mues
 El valor del umbral `S`, con cuatro subprocesos en cuatro CPU, cada uno incrementando el contador un millón de veces. Cuando `S` es bajo, el rendimiento es terrible (aunque el conteo global siempre es preciso). Cuando S es alto, el rendimiento es excelente, pero el recuento global se retrasa (como máximo, en la cantidad de CPU multiplicada por S). Los contadores aproximados permiten este equilibrio entre precisión y rendimiento.
 
 
-## Operaciones concurrentes en una Liked List
+## Operaciones concurrentes en una Linked List
 
 En la programación concurrente, modificar estructuras de datos comunes como listas enlazadas para admitir operaciones seguras para subprocesos puede ser complicado. Nos centraremos en la implementación concurrente de la operación de inserción en una lista enlazada, dejando otras operaciones como la búsqueda y la eliminación para una exploración más profunda.
 
@@ -241,30 +258,39 @@ El desafío de la escalabilidad:
 - **Lista concurrente básica**: si bien una lista enlazada concurrente básica con un solo bloqueo para toda la lista es simple, no se escala bien con múltiples subprocesos.
 - Enfoque de bloqueo de mano sobre mano: este enfoque implica agregar un bloqueo a cada nodo de la lista. A medida que uno recorre la lista, adquiere el bloqueo del siguiente nodo antes de liberar el actual, de ahí el término "mano sobre mano".
     - Pros y contras: conceptualmente, el bloqueo de mano sobre mano aumenta el paralelismo en las operaciones de lista. Sin embargo, en la práctica, la sobrecarga de bloquear cada nodo puede ser prohibitiva, lo que a menudo lo hace menos eficiente que un solo bloqueo, especialmente para listas extensas y numerosos subprocesos.
-Posibles alternativas
-Enfoques híbridos: investigar un método híbrido, donde se adquiere un bloqueo para cada pocos nodos, podría ser una solución más práctica. Colas concurrentes: el enfoque de Michael y Scott
-Estructura de cola de dos bloqueos
-Implementación: a diferencia del método más simple de usar un solo bloqueo prominente, el diseño de Michael y Scott para una cola concurrente implica dos bloqueos separados: uno para la cabeza y otro para la cola.
-Mejora de la concurrencia: esta estructura permite que las operaciones de encolado utilicen principalmente el bloqueo de cola y las operaciones de desencolado utilicen el bloqueo de cabeza, lo que permite la ejecución concurrente de estas funciones.
-Técnica del nodo ficticio
-Propósito: un nodo ficticio, asignado durante la inicialización de la cola, separa las operaciones de cabeza y cola, lo que mejora aún más la concurrencia.
-Comprensión de la cola
-Interacción con el código: para comprender completamente cómo funciona la cola concurrente de Michael y Scott, es beneficioso leer, escribir y ejecutar el código usted mismo. Medir su rendimiento puede proporcionar información valiosa.
-Aplicación de colas en sistemas multiproceso
-Frecuencia de uso: las colas son comunes en aplicaciones multiproceso, pero a menudo requieren más que solo bloqueos para satisfacer las demandas de dichos sistemas.
-Próximo tema: el próximo capítulo explorará una cola limitada más desarrollada que utiliza variables de condición, adecuadas para escenarios en los que un hilo necesita esperar si la cola está vacía o demasiado llena.
-El programa en el panel izquierdo muestra el proceso de poner y quitar elementos de la cola, mostrando la concurrencia lograda mediante el uso de bloqueos separados para la cabeza y la cola de la cola.
+
+### Posibles alternativas
+
+- Enfoques híbridos: investigar un método híbrido, donde se adquiere un bloqueo para cada pocos nodos, podría ser una solución más práctica. 
+- Colas concurrentes: el enfoque de Michael y Scott
+
+### Estructura de cola de dos bloqueos
+
+- Implementación: a diferencia del método más simple de usar un solo bloqueo prominente, el diseño de Michael y Scott para una cola concurrente implica dos bloqueos separados: uno para la cabeza y otro para la cola.
+- Mejora de la concurrencia: esta estructura permite que las operaciones de encolado utilicen principalmente el bloqueo de cola y las operaciones de desencolado utilicen el bloqueo de cabeza, lo que permite la ejecución concurrente de estas funciones.
+
+### Técnica del nodo ficticio
+
+- Propósito: un nodo ficticio, asignado durante la inicialización de la cola, separa las operaciones de cabeza y cola, lo que mejora aún más la concurrencia.
+
+### Comprensión de la cola
+
+- Interacción con el código: para comprender completamente cómo funciona la cola concurrente de Michael y Scott, es beneficioso leer, escribir y ejecutar el código usted mismo. Medir su rendimiento puede proporcionar información valiosa.
+
+### Aplicación de colas en sistemas multiproceso
+
+- Frecuencia de uso: las colas son comunes en aplicaciones multiproceso, pero a menudo requieren más que solo bloqueos para satisfacer las demandas de dichos sistemas.
 
 
+### Usando Colas
 
-Explicación:
-Inicialización de la cola: la función Queue_Init inicializa una cola vacía con un nodo ficticio.
-Operaciones de puesta en cola y desconexión de la cola: Queue_Enqueue agrega un elemento en la cola y Queue_Dequeue elimina un elemento de la cabecera de la cola. Ambas operaciones están protegidas por bloqueos separados (head_lock y tail_lock), lo que mejora la concurrencia.
-Funciones de subproceso: EnqueueThread y DequeueThread se utilizan para demostrar la puesta en cola y la desconexión de la cola simultáneas.
-Función principal: inicializa la cola, crea dos subprocesos (uno para poner en cola y otro para desconexión de la cola) y espera a que completen sus operaciones.
+- Inicialización de la cola: la función Queue_Init inicializa una cola vacía con un nodo ficticio.
+- Operaciones de puesta en cola y desconexión de la cola: Queue_Enqueue agrega un elemento en la cola y Queue_Dequeue elimina un elemento de la cabecera de la cola. Ambas operaciones están protegidas por bloqueos separados (head_lock y tail_lock), lo que mejora la concurrencia.
+- Funciones de subproceso: EnqueueThread y DequeueThread se utilizan para demostrar la puesta en cola y la desconexión de la cola simultáneas.
+- Función principal: inicializa la cola, crea dos subprocesos (uno para poner en cola y otro para desconexión de la cola) y espera a que completen sus operaciones.
 
 
-## Tabla hash concurrente
+### Tabla hash concurrente
 La tabla hash es una estructura de datos versátil y ampliamente utilizada, y concluimos nuestro análisis de las estructuras de datos concurrentes centrándonos en una tabla hash simple y no redimensionable.
 Estructura y rendimiento
 Implementación: La tabla hash concurrente se construye utilizando las listas concurrentes que hemos analizado anteriormente.
@@ -279,3 +305,53 @@ Concurrencia frente a rendimiento: aumentar la concurrencia no siempre se traduc
 Abordar los problemas de rendimiento: es esencial identificar y resolver los problemas de rendimiento a medida que surgen. Sin embargo, esto debe equilibrarse con las necesidades generales de rendimiento del programa.
 Optimización prematura: una advertencia
 Evitar la optimización excesiva: en la búsqueda del rendimiento, tenga cuidado con la optimización prematura. Concéntrese en realizar mejoras que realmente contribuyan a la eficacia general del programa, en lugar de optimizar aspectos que tienen poco impacto en el rendimiento más amplio.
+
+
+
+
+
+- Entender las limitaciones de los locks y por que necesitamos primitivas adicionales
+- Simularemos Productores/Consumidores an un único buffer.
+- Por qué y como aplicar Lampson y Redells.
+
+
+## Mecanismos de espera eficientes en aplicaciones concurrentes
+
+
+### Las limitaciones de los bloqueos y la necesidad de primitivas adicionales
+
+Mientras que los locks son cruciales para el manejo de accesos a los recursos compartidos, no son suficiente para todos los escenarios de control de concurrencia.
+
+Es muy común que los threads necesitan esperar por una condición especifica para continuar con la ejecución.
+
+
+#### Sincronización de hilos Parent-child
+
+
+Tratemos de reparar el siguiente código para obtener la salida esperada:
+```cpp
+void *child(void *arg) {
+    printf("child\n");
+    // Indicate completion needed
+    return NULL;
+}
+
+int main(int argc, char *argv[]) {
+    printf("parent: begin\n");
+    pthread_t c;
+    Pthread_create(&c, NULL, child, NULL); // create child
+    // Wait for child needed
+    printf("parent: end\n");
+    return 0;
+}
+```
+
+Salida esperada:
+
+
+```bash
+parent: begin
+child
+parent: end
+```
+

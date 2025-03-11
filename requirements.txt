@@ -15,6 +15,7 @@ graphql-relay==3.1.0 # https://github.com/graphql-python/graphql-relay-py
 greenback==1.2.1 # Reenter an async event loop from synchronous code. 
 greenlet==3.1.0 # Greenlets are lightweight coroutines for in-process concurrent programming. # https://github.com/python-greenlet/greenlet
 marshmallow==2.20.5
+pycapnp==2.0.0 # RPC tool
 pytest==7.2.0 # https://github.com/pytest-dev/pytest
 requests==2.32.3
 termcolor==1.1.0
