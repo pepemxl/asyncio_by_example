@@ -460,15 +460,589 @@ Las limitaciones del bloqueo basado en banderas:
 
 
 
-## Contruir un lock de turnos con test y set
+## Contruir un lock de turnos con TestAndSet
+
+Nuevo hardware!!!
+
+Debido a las limitaciones de la desactivación de interrupciones en sistemas multiprocesador y a la insuficiencia de las cargas y almacenamientos básicos, los diseñadores de sistemas comenzaron a incorporar soporte de hardware para mecanismos de bloqueo. Este soporte, presente en los primeros sistemas multiprocesador y ahora estándar en todos los sistemas, es crucial para construir bloqueos eficaces.
+
+La instrucción TestAndSet es una pieza fundamental del soporte de hardware para el bloqueo:
+
+```c
+int TestAndSet(int *old_ptr, int new) {
+    int old = *old_ptr; // Obtenemos el valor
+    *old_ptr = new;     // Guardamos un nuevo valor en old_ptr
+    return old;         // Refresamos el valor habia en old_ptr
+}
+```
+Esta instrucción atómica prueba y actualiza simultáneamente un valor. Es esencial para crear un bloqueo de turno básico.
+
+- Adquisición de bloqueo
+    - Escenario inicial: Si un hilo llama a `lock()` y ningún otro hilo mantiene el bloqueo, `TestAndSet(flag, 1)` devolverá `0` (el valor anterior) y el hilo adquiere el bloqueo, estableciendo el flag en 1.
+    - Bloqueo mantenido por otro hilo: Si otro hilo ya mantiene el bloqueo (el flag es 1), `TestAndSet(flag, 1)` devolverá `1`, lo que provocará que el hilo entre en un bucle de espera hasta que se libere el bloqueo.
+- Garantía de exclusión mutua
+    - Atomicidad: La naturaleza atómica de la operación de TestAndSet garantiza que solo un hilo pueda adquirir el bloqueo a la vez, lo que proporciona exclusión mutua.
+- Desbloqueo
+    - Liberación del bloqueo: El hilo que desbloquea restablece el flag a 0, lo que permite que otros hilos adquieran el bloqueo.
+- Evaluación de bloqueos por turno
+    - Efectividad
+        - Exclusión mutua: El bloqueo por turnos permite que solo un hilo a la vez entre en la sección crítica, logrando así su objetivo fundamental. 
+    - Equidad
+        - Posibilidad de starvation: Los bloqueos por turno no garantizan la equidad. Un hilo podría tener el turno(girar/spin) indefinidamente, lo que podría provocar problemas de starvation.
+- Rendimiento
+    - Escenario con una sola CPU: En una sola CPU, si el hilo que mantiene el bloqueo es interrumpido, otros hilos desperdiciarán ciclos de CPU en el bucle de espera de un turno.
+    - Escenario con varias CPU: Los bloqueos por turno son más eficientes cuando el número de hilos es aproximadamente igual al número de CPU. Los hilos en CPU independientes pueden realizar la espera turno de forma eficaz, adquiriendo rápidamente el bloqueo una vez disponible.
 
 
+```cpp
+#include <iostream>
+#include <atomic>
+#include <thread>
+#include <vector>
+
+class SpinLock {
+private:
+    std::atomic<bool> flag;
+
+public:
+    SpinLock() : flag(false) {}
+
+    void lock() {
+        bool expected = false;
+        while (!flag.compare_exchange_strong(expected, true)) {
+            expected = false;
+        }
+    }
+
+    void unlock() {
+        flag.store(false);
+    }
+};
+
+void criticalSection(int threadID, SpinLock &spinLock) {
+    std::cout << "Thread " << threadID << " intentar adquirir el lock..." << std::endl;
+    spinLock.lock();
+    std::cout << "Thread " << threadID << " lock adquirido" << std::endl;
+    std::cout << "Thread " << threadID << " seccion critica" << std::endl;
+    spinLock.unlock();
+    std::cout << "Thread " << threadID << " lock liberado" << std::endl;
+}
+
+int main() {
+    const int numThreads = 5;
+    SpinLock spinLock;
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < numThreads; ++i) {
+        threads.emplace_back(criticalSection, i, std::ref(spinLock));
+    }
+
+    for (auto &thread : threads) {
+        thread.join();
+    }
+
+    return 0;
+}
+```
+
+Para compilar 
+`g++ -o spinlock_example -std=c++11 spinlock_example.cpp -pthread
+`
+y para correr el programa `./spinlock_example`
+
+Salida
+
+```bash
+Thread 0 intentar adquirir el lock...
+Thread Thread 0 lock adquirido.
+Thread 0 seccion critica.
+Thread 0 lock liberado.
+Thread 2 intentar adquirir el lock...
+Thread 2 lock adquirido.
+Thread 2 seccion critica.
+Thread 2 lock liberado.
+1 intentar adquirir el lock...
+Thread 1 lock adquirido.
+Thread 1 seccion critica.
+Thread 1 lock liberado.
+Thread 3 intentar adquirir el lock...
+Thread 3 lock adquirido.
+Thread 3 seccion critica.
+Thread 3 lock liberado.
+Thread 4 intentar adquirir el lock...
+Thread 4 lock adquirido.
+Thread 4 seccion critica.
+Thread 4 lock liberado.
+```
+
+Aqui la clase SpinLock imita un bloqueo por turnos(spin) simple mediante una bandera booleana atómica. El método lock "gira" hasta que logra cambiar la bandera de falso a verdadero, y unlock la restablece a falso.
+Mientras que la función simula el intento de un hilo de entrar en una sección crítica, adquiriendo y liberando el bloqueo por turnos(spin).
+Donde la función principal crea varios hilos, cada uno intentando entrar en la sección crítica.
 
 
+En el programa de ejemplo usamos std:atomic, para simular TestAndSet sin embargo este tipo de operaciones realmente se hacen a nivel de hardware.
+
+Los bloqueos de spin son efectivos en ciertos escenarios (como duraciones de bloqueos cortos y de baja contención), pero pueden ser ineficientes si se usan en exceso o se aplican incorrectamente, ya que utilizan ciclos de CPU mientras esperan.
+
+El comportamiento de los subprocesos y los bloqueos puede depender en gran medida del scheduler del sistema y de la cantidad de CPU disponibles.
 
 
+## Compara e intercambia
+
+Comparar e Intercambiar (CAS), conocido como Comparar e Intercambiar en arquitecturas x86, es una primitiva de hardware que ofrecen algunos sistemas para facilitar la programación concurrente.
+
+Funcionalidad de CAS en pseudocódigo de C
+El funcionamiento básico de CAS se puede comprender mediante el siguiente pseudocódigo de C:
+
+```c
+int CompareAndSwap(int *ptr, int expected, int new) {
+    int original = *ptr;
+    if (original == expected)
+        *ptr = new;
+    return original;
+}
+```
+
+### Principio fundamental de CAS
+
+- Actualización condicional: CAS comprueba si el valor en la dirección especificada por `ptr` es igual al esperado. Si es así, actualiza automáticamente `ptr` con `new`. Si no, deja `ptr` sin cambios.
+- Valor de retorno: En ambos casos, CAS devuelve el valor original en `ptr`, lo que permite que el código de llamada determine si la actualización se realizó correctamente.
+
+La implementación seria algo como lo siguiente:
+
+```c
+void lock(lock_t *lock) {
+    while (CompareAndSwap(&lock->flag, 0, 1) == 1)
+        ; // Spin-wait
+}
+```
+
+La adquisición de bloqueo es a traves de la función de bloqueo que intenta continuamente intercambiar un 1 en bloqueo->bandera si su valor actual es 0. Si la bandera ya es 1 (bloqueo mantenido), el hilo entra en un bucle de espera de turno(spin).
+
+#### Ventajas de CAS
+
+- Versatilidad: CAS es más flexible que el método de prueba y configuración, lo que abre la posibilidad de técnicas de sincronización más avanzadas, como la sincronización sin bloqueos.
+- Comportamiento de bloqueo de turno(spin) simple: Cuando se utiliza para bloqueos de spin simples, CAS se comporta de forma similar al bloqueo de spin, esperando(girando) hasta que el bloqueo esté disponible.
+
+```cpp
+#include <iostream>
+#include <atomic>
+#include <thread>
+#include <vector>
+
+class CASLock {
+private:
+    std::atomic<int> flag;
+
+public:
+    CASLock() : flag(0) {}
+
+    void lock() {
+        int expected = 0;
+        while (!flag.compare_exchange_strong(expected, 1)) {
+            expected = 0; // Reset expected as it gets modified by compare_exchange_strong
+        }
+    }
+
+    void unlock() {
+        flag.store(0);
+    }
+};
+
+void criticalSection(int threadID, CASLock &casLock) {
+    std::cout << "Thread " << threadID << " attempting to acquire lock..." << std::endl;
+    casLock.lock();
+    std::cout << "Thread " << threadID << " has acquired lock." << std::endl;
+    std::cout << "Thread " << threadID << " is in critical section." << std::endl;
+    casLock.unlock();
+    std::cout << "Thread " << threadID << " has released lock." << std::endl;
+}
+
+int main() {
+    const int numThreads = 5;
+    CASLock casLock;
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < numThreads; ++i) {
+        threads.emplace_back(criticalSection, i, std::ref(casLock));
+    }
+
+    for (auto &thread : threads) {
+        thread.join();
+    }
+
+    return 0;
+}
+```
+
+Salida
+
+```bash
+Thread 0 attempting to acquire lock...
+Thread 0 has acquired lock.
+Thread 0 is in critical section.
+Thread 0 has released lock.
+Thread 1 attempting to acquire lock...
+Thread 1 has acquired lock.
+Thread 1 is in critical section.
+Thread 1 has released lock.
+Thread 2 attempting to acquire lock...
+Thread 2 has acquired lock.
+Thread 2 is in critical section.
+Thread 2 has released lock.
+Thread 3 attempting to acquire lock...
+Thread 3 has acquired lock.
+Thread 3 is in critical section.
+Thread 3 has released lock.
+Thread 4 attempting to acquire lock...
+Thread 4 has acquired lock.
+Thread 4 is in critical section.
+Thread 4 has released lock.
+```
+
+## Load-Linked y Store-Conditional
+
+Load-Linked (LL) y Store-Conditional (SC) son pares de instrucciones que se utilizan en plataformas como MIPS, ARM y PowerPC para crear bloqueos y otras estructuras concurrentes. Estas instrucciones trabajan juntas para habilitar operaciones atómicas cruciales para la sincronización de hilos.
+
+### Funcionalidad en pseudocódigo de C
+
+- Carga enlazada (LL): Esta instrucción carga un valor desde una ubicación de memoria a un registro. Prepara el almacenamiento condicional posterior.
+- Almacenamiento condicional (SC): Esta instrucción intenta almacenar un valor en la ubicación de memoria si no se han realizado actualizaciones desde la última operación de carga enlazada. Devuelve 0 en caso de error, manteniendo el valor sin cambios.
+
+```c
+void lock(lock_t *lock) {
+    while (LoadLinked(&lock->flag) || 
+           !StoreConditional(&lock->flag, 1))
+        ; // Spin-wait
+}
+```
+
+### Mecánica del bloqueo
+
+- Esperando la disponibilidad del bloqueo: El hilo comprueba si lock->flag es 0, lo que indica que el bloqueo no se mantiene.
+- Adquiriendo el bloqueo: El hilo intenta establecer el flag en 1 mediante SC. Si el SC tiene éxito, se adquiere el bloqueo.
+- Manejo de fallos de SC: Si el SC falla (otro hilo adquirió el bloqueo primero), el bucle continúa y el hilo lo intenta de nuevo.
+
+Este enfoque funciona por que:
+- Atomicidad: La combinación de LL y SC garantiza la atomicidad. Cuando dos hilos intentan adquirir el bloqueo simultáneamente después de una operación LL, solo uno tendrá éxito con el SC. El SC del otro hilo fallará, obligándolo a reintentarlo.
 
 
+#### Forma compacta
+
+- Cortocircuito de condicionales booleanos: Se puede implementar una forma más compacta de la función de bloqueo, acortando el código pero con funcionalidades equivalentes.
+
+
+Las instrucciones de carga vinculada y almacenamiento condicional proporcionan una forma eficaz de implementar bloqueos en programación concurrente al garantizar operaciones atómicas. Su uso combinado garantiza que solo un hilo pueda adquirir el bloqueo a la vez, lo que evita las condiciones de carrera y permite una sincronización adecuada.
+
+Implementar instrucciones de carga vinculada (LL) y almacenamiento condicional (SC) en C++ para un mecanismo de bloqueo es algo abstracto, ya que se trata de instrucciones a nivel de hardware específicas de ciertas arquitecturas como MIPS, ARM y PowerPC. En C++ estándar, en arquitecturas x86 típicas, no tenemos acceso directo a las instrucciones LL/SC. Sin embargo, podemos imitar su comportamiento utilizando las operaciones atómicas proporcionadas por la biblioteca estándar de C++ para demostrar un concepto similar.
+
+```cpp
+#include <iostream>
+#include <atomic>
+#include <thread>
+#include <vector>
+
+class LLSCLock {
+private:
+    std::atomic<int> flag;
+
+public:
+    LLSCLock() : flag(0) {}
+
+    void lock() {
+        while (true) {
+            int expected = 0;
+            // Load-Linked equivalent: load the value
+            if (flag.load(std::memory_order_relaxed) == expected) {
+                // Store-Conditional equivalent: attempt to store a new value
+                if (flag.compare_exchange_strong(expected, 1)) {
+                    break; // Break if SC succeeds
+                }
+            }
+        }
+    }
+
+    void unlock() {
+        flag.store(0, std::memory_order_relaxed);
+    }
+};
+
+void criticalSection(int threadID, LLSCLock &llscLock) {
+    std::cout << "Thread " << threadID << " attempting to acquire lock..." << std::endl;
+    llscLock.lock();
+    std::cout << "Thread " << threadID << " has acquired lock." << std::endl;
+    std::cout << "Thread " << threadID << " is in critical section." << std::endl;
+    llscLock.unlock();
+    std::cout << "Thread " << threadID << " has released lock." << std::endl;
+}
+
+int main() {
+    const int numThreads = 5;
+    LLSCLock llscLock;
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < numThreads; ++i) {
+        threads.emplace_back(criticalSection, i, std::ref(llscLock));
+    }
+
+    for (auto &thread : threads) {
+        thread.join();
+    }
+
+    return 0;
+}
+```
+
+Salida
+
+```bash
+Thread 0 attempting to acquire lock...
+Thread Thread 0 has acquired lock.
+Thread 0 is in critical section.
+Thread 0 has released lock.
+1 attempting to acquire lock...
+Thread 1 has acquired lock.
+Thread 1 is in critical section.
+Thread 1 has released lock.
+Thread 2 attempting to acquire lock...
+Thread 2 has acquired lock.
+Thread 2 is in critical section.
+Thread 2 has released lock.
+Thread 3 attempting to acquire lock...
+Thread 3 has acquired lock.
+Thread 3 is in critical section.
+Thread 3 has released lock.
+Thread 4 attempting to acquire lock...
+Thread 4 has acquired lock.
+Thread 4 is in critical section.
+Thread 4 has released lock.
+```
+
+
+- Clase LLSCLock: Simula un bloqueo mediante operaciones atómicas para imitar el comportamiento de LL y SC.
+- Función de bloqueo: Intenta continuamente establecer el indicador en 1 (adquirir el bloqueo) solo si actualmente es 0, imitando el patrón LL/SC.
+- Función de sección crítica: Muestra cómo los hilos intentan entrar y salir de una sección crítica adquiriendo y liberando el bloqueo.
+- Función principal: Crea varios hilos, cada uno de los cuales ejecuta la función de sección crítica.
+
+
+En el ejemplo utilizamos `std::atomic` para simular LL y SC, pero en el uso real en sistemas que admiten estas instrucciones, se utilizarían directamente para operaciones atómicas de bajo nivel en implementaciones de bloqueo.
+
+
+## La instrucción "FecthAndAdd" y la implementación del bloqueo de tickets
+
+La instrucción "FetchAndAdd" es una herramienta en la programación concurrente que incrementa automáticamente un valor en una dirección específica y devuelve el valor anterior.
+
+
+```c
+int FetchAndAdd(int *ptr) {
+    int old = *ptr;
+    *ptr = old + 1;
+    return old;
+}
+```
+
+Mellor-Crummey y Scott utilizaron la instrucción de FetchAndAdd para desarrollar un sistema de bloqueo de tickets, que utiliza una combinación de variables de ticket y turno.
+
+### Adquisición de Bloqueo
+
+- Asignación de Ticket: Un hilo adquiere un ticket mediante una operación atómica de búsqueda y adición en el contador de tickets. Este número de ticket (myturn) representa la posición del hilo en la cola.
+- Condición de Entrada: Un hilo entra en la sección crítica cuando su número de ticket coincide con el turno actual (myturn == turn).
+
+### Mecanismo de Desbloqueo
+
+- Incremento de Turno: Para liberar el bloqueo, el hilo simplemente incrementa la variable turn, permitiendo que el siguiente hilo en la cola entre en la sección crítica.
+- Ventajas del Bloqueo de Ticket
+    - Progreso Garantizado: Este método garantiza que todos los hilos progresen. A cada hilo se le asigna un ticket y entran en la sección crítica en el orden de sus tickets.
+    - Equidad: A diferencia de los métodos anteriores, donde un hilo podía girar indefinidamente, el bloqueo de ticket garantiza que cada hilo finalmente tendrá su turno para entrar en la sección crítica.
+
+Evaluación del Método de Bloqueo de Ticket: El enfoque de bloqueo de ticket aborda los problemas de equidad y de starvation(inanición) observados en implementaciones de bloqueo más simples, como los bloqueos de spin. Al asignar tickets y gestionar turnos, se garantiza un acceso más ordenado y justo a la sección crítica, evitando que los hilos queden bloqueados perpetuamente.
+
+```cpp
+#include <iostream>
+#include <atomic>
+#include <thread>
+#include <vector>
+
+class TicketLock {
+private:
+    std::atomic<int> ticketCounter;
+    std::atomic<int> turn;
+
+public:
+    TicketLock() : ticketCounter(0), turn(0) {}
+
+    void lock() {
+        int myTicket = ticketCounter.fetch_add(1); // Fetch-And-Add
+        while (turn.load(std::memory_order_relaxed) != myTicket) {
+            ; // Spin-wait
+        }
+    }
+
+    void unlock() {
+        turn.fetch_add(1); // Move to next ticket
+    }
+};
+
+void criticalSection(int threadID, TicketLock &ticketLock) {
+    std::cout << "Thread " << threadID << " attempting to acquire lock..." << std::endl;
+    ticketLock.lock();
+    std::cout << "Thread " << threadID << " has acquired lock." << std::endl;
+    std::cout << "Thread " << threadID << " is in critical section." << std::endl;
+    ticketLock.unlock();
+    std::cout << "Thread " << threadID << " has released lock." << std::endl;
+}
+
+int main() {
+    const int numThreads = 5;
+    TicketLock ticketLock;
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < numThreads; ++i) {
+        threads.emplace_back(criticalSection, i, std::ref(ticketLock));
+    }
+
+    for (auto &thread : threads) {
+        thread.join();
+    }
+
+    return 0;
+}
+```
+
+Salida
+
+```bash
+Thread 0 attempting to acquire lock...
+Thread 2 attempting to acquire lock...
+Thread 2 has acquired lock.
+Thread 2 is in critical section.
+Thread 2 has released lock.
+Thread 1 attempting to acquire lock...
+Thread 0 has acquired lock.
+Thread 0 is in critical section.
+Thread 0Thread  has released lock.
+Thread 3 attempting to acquire lock...
+Thread 4 attempting to acquire lock...
+1 has acquired lock.
+Thread 1 is in critical section.
+Thread 1 has released lock.
+Thread 3 has acquired lock.
+Thread 3 is in critical section.
+Thread 3 has released lock.
+Thread 4 has acquired lock.
+Thread 4 is in critical section.
+Thread 4 has released lock.
+```
+
+
+- Clase TicketLock: Implementa un bloqueo de ticket mediante operaciones atómicas. El método lock usa fetch_add para incrementar automáticamente ticketCounter y obtener un número de ticket. Gira hasta que llega su turno. El método unlock incrementa el turno para permitir que el siguiente titular de ticket adquiera el bloqueo.
+- Función de Sección Crítica: Representa el intento de un hilo de entrar en la sección crítica, adquiriendo y liberando el bloqueo de ticket.
+- Función Principal: Crea varios hilos para demostrar el mecanismo de bloqueo de ticket.
+
+
+### Escenario: Rotación en un solo procesador
+
+- Caso práctico: Imagine dos hilos en un solo procesador. El hilo 0 mantiene un bloqueo, pero se interrumpe. El hilo 1 intenta adquirir el bloqueo, lo encuentra ocupado y comienza a rotar.
+- Ineficiencia de la rotación: El hilo 1 desperdicia toda su porción de tiempo rotando, comprobando un valor que no cambiará hasta que el hilo 0 reanude y libere el bloqueo.
+- Empeoramiento con más hilos: Con más hilos compitiendo por el bloqueo, la ineficiencia se intensifica, ya que N-1 hilos podrían desperdiciar sus porciones de tiempo simplemente rotando.
+
+#### Ceder el paso(**Yield**) para evitar el desperdicio de ciclos de CPU
+
+- Idea básica: En lugar de girar, un hilo podría ceder el paso de CPU a otro. Esto se realiza mediante una llamada al sistema `yield()`, donde el hilo que cede el paso se desprograma, cambiando su estado de en ejecución a listo.
+- Efectividad en un escenario de doble hilo: En un escenario de dos hilos en una CPU, esta estrategia basada en el rendimiento funciona bien. Si un hilo no puede adquirir un bloqueo, cede el paso, lo que permite que el hilo que lo mantiene se ejecute y, potencialmente, lo libere.
+
+#### Desafíos con múltiples subprocesos
+
+- Ejemplo de scheduler round-robin: En un sistema con muchos subprocesos compitiendo por un bloqueo, ceder el bloqueo puede provocar frecuentes cambios de contexto. Si un subproceso adquiere el bloqueo y es interrumpido, los demás subprocesos encontrarán secuencialmente el bloqueo, cederán el bloqueo y entrarán en un ciclo de ejecución y cederán.
+- Costo del cambio de contexto: Si bien ceder el bloqueo es más eficiente que girar el bloqueo, aún implica costosos cambios de contexto.
+- Starvation(Inanición) no abordada: Ceder el bloqueo no resuelve el problema de la Starvation. Un subproceso podría atascarse en un bucle de ceder el bloqueo mientras otros adquieren y liberan el bloqueo repetidamente.
+
+
+## Usando Colas
+
+Dormir en lugar de Spin
+
+Nuestros métodos anteriores presentaban fallas porque dejaban demasiado al azar. Por lo tanto, si el scheduler elige el hilo equivocado, debe esperar el bloqueo o ceder la CPU inmediatamente. 
+
+Los métodos tradicionales de gestión de hilos y adquisición de bloqueos a menudo han generado ineficiencias e starvation(inanición). Para superar estos problemas, es esencial controlar qué hilo recibe un bloqueo después de que el holder del lock actual lo libere, lo que requiere un mejor soporte del sistema operativo y un mecanismo específico para el seguimiento de los hilos en espera.
+
+Un ejemplo práctico se observa en Solaris, donde se utilizan las funciones `park()` y `unpark(threadID)`.
+
+
+Implementación en Solaris:
+
+En Solaris, se emplean dos funciones clave, `park()` y `unpark(threadID)`. Estas funciones son fundamentales para gestionar los hilos que intentan adquirir un bloqueo:
+
+- Mecanismo de suspensión y activación: Un hilo se pone en suspensión si intenta adquirir un bloqueo que ya está mantenido y se despierta una vez que se libera el bloqueo. 
+- Eficiencia y prevención de inanición: Este enfoque fusiona el método tradicional de prueba y configuración con una cola para adquirentes de bloqueos en espera, lo que mejora la eficiencia de los bloqueos y minimiza la inanición de los mismos.
+
+Guardia y bloqueo giratorio:
+
+La guardia(guard) actúa como un bloqueo spin, protegiendo las operaciones en la bandera y la cola.
+
+- Espera giratoria temporal: En caso de interrupción de un hilo mientras gestiona un bloqueo, otros hilos realizan una espera giratoria, pero este periodo se limita a unas pocas instrucciones, lo que la convierte en una solución viable.
+
+Gestión de colas y manejo de banderas:
+
+Cuando un hilo no puede adquirir un bloqueo, sigue un proceso específico:
+
+- Se añade a la cola mediante la función gettid().
+- Libera la guardia y cede la CPU.
+- La bandera no se restablece al iniciar un nuevo hilo, lo cual no es un error, sino una característica necesaria para una transferencia de bloqueo fluida.
+
+Abordaje de condiciones de carrera:
+
+Un desafío importante es la condición de carrera que se produce justo antes de la llamada de estacionamiento. Solaris introduce `setpark()` para mitigar este problema:
+
+- Señalización preventiva: Un hilo indica su intención de estacionar, lo que garantiza que si se llama a unpark antes de aparcar, el hilo no se suspenda innecesariamente.
+- Cambio mínimo en el código: La implementación dentro de la función lock() es sencilla, ya que implica la adición de setpark() antes de liberar la protección.
+
+
+```c
+queue_add(m->q, gettid());
+ setpark(); // new code
+ m->guard = 0;
+```
+
+Protección a nivel de núcleo: Una solución alternativa es colocar la protección directamente dentro del núcleo, lo que permite operaciones atómicas en la liberación de bloqueos y la desencola de subprocesos, mejorando así la eficiencia general del proceso.
+
+
+## Soporte por OS
+
+Diferentes sistemas operativos ofrecen un diferente soporte.
+
+### Sistema Futex de Linux:
+
+Linux incorpora una característica similar a la de Solaris, pero con capacidades mejoradas en el núcleo:
+
+- Memoria física y cola: Cada futex en Linux tiene una ubicación de memoria física dedicada y una cola en el núcleo.
+- Funciones de suspensión y activación: El sistema proporciona dos llamadas futex principales:
+    - futex wait(address, expected): Pone el hilo que realiza la llamada en suspensión a menos que se cumpla la condición, en cuyo caso la llamada finaliza.
+    - futex wake(address): Despierta un hilo de la cola.
+
+Implementación de código en el mutex de Linux:
+
+Un ejemplo de estas llamadas futex se puede encontrar en el mutex de Linux, como se ilustra en el código de lowlevellock.h en la biblioteca nptl. 
+
+Complejidades del código Lowlevellock.h:
+
+Estado del bloqueo y seguimiento de los bloqueos en espera: 
+
+El código utiliza un único entero para monitorizar tanto el estado del bloqueo (indicado por el bit alto) como el número de bloqueos en espera (representado por los demás bits). Un valor negativo significa que el bloqueo se mantiene.
+
+Optimización para escenarios comunes: Este fragmento muestra la optimización para el caso habitual en el que un único hilo adquiere y libera un bloqueo, utilizando la prueba y configuración de bits atómicos para el bloqueo y la adición atómica para el desbloqueo.
+
+Comprensión del bloqueo en el mundo real de Linux:
+
+Experimentar con este mecanismo de bloqueo práctico puede mejorar significativamente la comprensión de los sistemas de bloqueo de Linux. Dominar esta área equivale a comprender aplicaciones reales más allá del conocimiento teórico.
+
+Técnicas modernas de construcción de bloqueos:
+
+Los bloqueos contemporáneos combinan compatibilidad con hardware (como instrucciones avanzadas) con compatibilidad con sistemas operativos (como park() y unpark() en Solaris o futex en Linux). Los detalles de estas implementaciones varían, y la codificación para dichos bloqueos suele estar meticulosamente optimizada. 
+
+Recursos de aprendizaje adicionales:
+
+Para quienes buscan una comprensión más profunda, se recomienda examinar el código base de Solaris o Linux. Además, estudios como el de David et al., que analiza las técnicas de bloqueo en los multiprocesadores actuales, ofrecen valiosas perspectivas sobre el tema.
 
 
 
