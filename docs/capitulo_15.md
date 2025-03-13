@@ -291,18 +291,16 @@ El desafío de la escalabilidad:
 
 
 ### Tabla hash concurrente
+
 La tabla hash es una estructura de datos versátil y ampliamente utilizada, y concluimos nuestro análisis de las estructuras de datos concurrentes centrándonos en una tabla hash simple y no redimensionable.
+
 Estructura y rendimiento
-Implementación: La tabla hash concurrente se construye utilizando las listas concurrentes que hemos analizado anteriormente.
-Mecanismo de bloqueo: Cada contenedor hash, representado por una lista, tiene su propio bloqueo. Esto difiere del uso de un único bloqueo para toda la tabla.
-Ventajas: Al asignar un bloqueo por contenedor hash, la tabla hash permite que se produzcan múltiples operaciones simultáneamente, lo que mejora significativamente su rendimiento.
+
+- Implementación: La tabla hash concurrente se construye utilizando las listas concurrentes que hemos analizado anteriormente.
+- Mecanismo de bloqueo: Cada contenedor hash, representado por una lista, tiene su propio bloqueo. Esto difiere del uso de un único bloqueo para toda la tabla.
+- Ventajas: Al asignar un bloqueo por contenedor hash, la tabla hash permite que se produzcan múltiples operaciones simultáneamente, lo que mejora significativamente su rendimiento.
 ex3
-El gráfico anterior representa el rendimiento de la tabla hash cuando se realizan muchas actualizaciones simultáneamente (de 10 000 a 50 000 actualizaciones simultáneas de cada uno de los cuatro subprocesos, en el mismo iMac con cuatro CPU). El rendimiento de una lista enlazada también se muestra con fines comparativos (con un único bloqueo). Esta sencilla tabla hash concurrente escala perfectamente, como se muestra en el gráfico; Por otro lado, la lista enlazada no lo hace.
-Resumen de lecciones de las estructuras de datos concurrentes
-Conclusiones clave
-Gestión de bloqueos: tenga cuidado al adquirir y liberar bloqueos, especialmente durante los cambios en el flujo de control. Un manejo inadecuado puede generar errores e ineficiencias.
-Concurrencia frente a rendimiento: aumentar la concurrencia no siempre se traduce en un mejor rendimiento. Es importante equilibrar los mecanismos de concurrencia con los beneficios de rendimiento reales que aportan.
-Abordar los problemas de rendimiento: es esencial identificar y resolver los problemas de rendimiento a medida que surgen. Sin embargo, esto debe equilibrarse con las necesidades generales de rendimiento del programa.
+
 Optimización prematura: una advertencia
 Evitar la optimización excesiva: en la búsqueda del rendimiento, tenga cuidado con la optimización prematura. Concéntrese en realizar mejoras que realmente contribuyan a la eficacia general del programa, en lugar de optimizar aspectos que tienen poco impacto en el rendimiento más amplio.
 
@@ -354,4 +352,123 @@ parent: begin
 child
 parent: end
 ```
+
+
+## Aprendiendo Bloqueos(Locks)
+
+- Entender la utilidad de los Locks
+- Implementar lock, fecth y add
+- Evaluar locks en un código simple
+- Entender la instrucción compare-and-swap
+- Tecnicas avanzadas de locks
+    - Llamadas Solaris con mecanismo de cola.
+
+Programación concurrente va de la mano con operaciones atomicas.
+
+
+**Definición**. Un **Lock** es una herramienta para asegurar que operaciones criticas corren de manera atomica. Los locks operan como gatekeepers, permitiendo que un solo hilo a lavez pueda ejecutar el código protegido por el lock.
+
+Por ejemplo consideremos la actualización de una variable:
+
+```cpp
+lock_t mutex; // Glocal Lock
+// seccion cque debe ser bloqueada
+lock(&mutex);
+critical_value = critical_value + 1;
+unlock(&mutex);
+```
+
+### Posix Mutex y hardware que soporta Locks
+
+
+En la librería de threads POSIX los locks se conocen como **mutex**, que es un acronimo para **mutual exclusion**. Los mutex evitan que distintos threads accedan a la misma memoria compartida.
+
+
+```cpp
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER; // Inicialicion de Mutex
+
+Pthread_mutex_lock(&lock);   // Try mutex or exit
+critical_value = critical_value + 1;       // Seccion protegida
+Pthread_mutex_unlock(&lock); // Libreamos el lock
+```
+
+
+## Bloqueo Granular
+
+
+Cuando queremos proteger distintas partes del código podemos obtar por definir distintos mutex. Lo cual es más eficaz y reduce los cuellos de botella.
+
+
+## Soporte desde el Hardware y desde el OS
+
+- Hay hardware que facilita el uso de locks a nivel de hardware!
+- Usualmente el OS ayuda al control de los locks.
+
+## Qué debemos cuidar al diseñar un lock?
+
+- Asegurar la exclusión mutua.
+- Dar la misma oportunidad a cada thread.
+- Evitat starvation
+- Performance:
+    - Overhead de unthread que adquiere y libera el lock
+    - Single CPU con multiples threads
+    - Multiple CPU con multiples threads
+
+
+## Controlar las interrupciones
+
+Un metodo efectivo en un solo CPU es activar y desactivar interrupciones en partes criticas.
+
+
+## Usar Locks a nivel de CPU 
+
+
+Lock usando una bandera:
+
+```cpp
+typedef struct __lock_t { int flag; } lock_t;
+
+void init(lock_t *mutex) {
+    // 0 -> lock is available, 1 -> held
+    mutex->flag = 0;
+}
+
+void lock(lock_t *mutex) {
+    while (mutex->flag == 1) // TEST the flag
+        ; // spin-wait (do nothing)
+    mutex->flag = 1; // now SET it!
+}
+
+void unlock(lock_t *mutex) {
+    mutex->flag = 0;
+}
+
+```
+
+La mecánica del bloqueo es como sigue:
+
+- Inicialización: El bloqueo se inicializa con el indicador a 0, lo que indica que está disponible.
+- Adquisición del bloqueo: La función de bloqueo comprueba si el indicador es 1 (bloqueo mantenido por otro hilo). De lo contrario, lo establece a 1, lo que indica que el bloqueo ya está adquirido.
+- Liberación del bloqueo: La función de desbloqueo restablece el indicador a 0, lo que permite que el bloqueo vuelva a estar disponible.
+
+Las limitaciones del bloqueo basado en banderas:
+
+- Problema de corrección: 
+    - Posibilidad de condiciones de carrera: Existe una ventana crítica entre la comprobación `while (mutex->flag == 1)` y el establecimiento `mutex->flag = 1;` donde otro hilo podría adquirir el bloqueo, lo que provocaría que varios hilos entraran en la sección crítica simultáneamente.
+- Problema de rendimiento
+    - Espera de turno: Los hilos que esperan el bloqueo entran en un bucle de espera de turno, comprobando continuamente la bandera. Esto puede ser ineficiente, especialmente si el bloqueo se mantiene durante un período prolongado, ya que consume ciclos de CPU sin realizar ningún trabajo útil.
+
+
+
+## Contruir un lock de turnos con test y set
+
+
+
+
+
+
+
+
+
+
 
