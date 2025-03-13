@@ -12,6 +12,7 @@ Gevent es una biblioteca de Python que facilita la programación asíncrona y co
 4. **Escalabilidad**: Es ideal para aplicaciones que necesitan manejar muchas conexiones simultáneas, como servidores web o APIs.
 
 ### Ejemplo básico de uso:
+
 ```python
 import gevent
 from gevent import monkey
@@ -36,6 +37,19 @@ greenlets = [
 # Espera a que todas las tareas terminen.
 gevent.joinall(greenlets)
 ```
+
+`monkey.patch_all()` puede afectar a varios módulos de la biblioteca estándar de Python, incluyendo:
+
+- socket: Reemplaza las funciones de red para que sean no bloqueantes.
+- ssl: Similar a socket, pero para conexiones seguras.
+- select: Reemplaza las funciones de selección para que funcionen con greenlets.
+- thread: Reemplaza las funciones relacionadas con hilos para que funcionen con greenlets.
+- time: Reemplaza funciones relacionadas con el tiempo para que sean compatibles con gevent.
+- os: Reemplaza ciertas funciones relacionadas con el sistema operativo, como os.fork().
+- subprocess: Reemplaza las funciones relacionadas con la creación de subprocesos.
+- threading: Reemplaza las funciones relacionadas con hilos para que funcionen con greenlets.
+
+
 
 ### Casos de uso comunes:
 - **Servidores web**: Gevent se usa a menudo con frameworks como Flask o Django para manejar muchas conexiones simultáneas.
