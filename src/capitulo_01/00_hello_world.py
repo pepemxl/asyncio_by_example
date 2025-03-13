@@ -3,15 +3,18 @@ import time
 
 
 async def say_after(delay, message):
+    # print("Inicio con delay", delay)
     await asyncio.sleep(delay)
     print(message, end=' ')
 
 async def main():
     print(f"started at {time.strftime('%X')}")
-
-    await say_after(1, 'hello')
-    await say_after(2, 'world')
-    await say_after(3, 'pepe')
+    # tasks = []
+    # tasks.append(await say_after(3, 'pepe'))
+    # tasks.append(await say_after(2, 'World'))
+    # tasks.append(await say_after(1, 'Hello'))
+    await asyncio.gather(say_after(3, 'pepe'),say_after(2, 'World'), say_after(1, 'Hello'))
+    #await asyncio.gather_all(tasks)
     print('')
     print(f"finished at {time.strftime('%X')}")
 
