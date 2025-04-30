@@ -4,6 +4,17 @@
 
 `asyncio` es un **framework de programación asíncrona** basado en la ejecución de un **loop de eventos**. Este facilita la ejecución de **código no bloqueante**, lo que significa que una tarea puede avanzar mientras espera que otras terminen.
 
+En **python** `asyncio` es una biblioteca para escribir código concurrente utilizando la sintaxis `async/await`.
+
+`asyncio` provee un conjunto de APIs de alto nivel para:
+
+- ejecutar corutinas de Python de manera concurrente y tener control total sobre su ejecución;
+- realizar tareas de E/S y comunicación entre procesos(IPC);
+- controlar subprocesos;
+- distribuir tareas a través de colas;
+- sincronizar código concurrente;
+
+
 Este módulo es útil para manejar múltiples tareas de I/O (entrada/salida), como:
 
 - Llamadas a APIs.
@@ -104,3 +115,24 @@ A alto nivel asyncio proporciona APIs para trabajar con **coroutines** y **tasks
 ## Coroutines
 
 Las Coroutines se declaran con la sintaxis async/await.
+
+Por ejemplo, el siguiente fragmento de código imprime `hola`, espera 1 segundo y luego imprime `mundo`:
+
+```python
+import asyncio
+
+async def main():
+    print('hello')
+    await asyncio.sleep(1)
+    print('world')
+```
+
+Para correr esta corrutina usamos
+
+```python
+asyncio.run(main())
+```
+
+
+
+
