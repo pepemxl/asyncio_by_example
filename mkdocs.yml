@@ -1,0 +1,57 @@
+site_name: Curso de Asyncio
+site_description: Un sitio para aprender computación concurrente
+theme:
+  name: material
+  features:
+    - content.code.annotate
+    - content.code.copy
+    - content.code.select
+  palette:
+    scheme: slate
+    primary: indigo
+    accent: indigo
+  highlightjs: true
+  hljs_languages:
+    - yaml
+    - python
+    - typespec
+    - rust
+  collapse_navigation: True
+  locale: es
+nav:
+  - Inicio: 'index.md'
+  - "Módulo 1":
+    - "Sección 1 ¿Qué es asyncio?": 'module_01/section_01.md'
+    - "Sección 2 Procesos e Hilos": 'module_01/section_02.md'
+    - "Sección 3 Ejemplos de Asyncio": 'module_01/section_03.md'
+    - "Sección 4 Gevent": 'module_01/section_04.md'
+plugins:
+  - search
+  - mermaid2
+  - glightbox
+extra_javascript:
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg-full.js
+  - https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML
+markdown_extensions:
+  - smarty
+  - mdx_math
+  - pymdownx.arithmatex
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - attr_list
+  - md_in_html
+  - pymdownx.blocks.caption
+extra_css:
+  - stylesheets/extra.css
+extra_javascript:
+  - javascripts/extra.js
