@@ -1,6 +1,6 @@
 # asyncio by example
 
-Asyncio is una librería para escribir código concurrente usando la sintaxis **async/await**.
+Asyncio es una librería para escribir código concurrente usando la sintaxis **async/await**.
 
 
 

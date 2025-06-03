@@ -8,7 +8,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     #capnproto \
-    libcapnp-dev \
+    # libcapnp-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copia solo el archivo de dependencias primero (para aprovechar la caché de Docker)
