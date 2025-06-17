@@ -8,9 +8,11 @@ services:
         USER_GID: ${GID:-1000}
     container_name: python_dev
     image: python_dev
-    user: "${UID:-1000}:${GID:-1000}"
+    #user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - ./src:/app/src  # Comparte el código entre el host y el contenedor
+    environment:
+      - TERM=xterm-256color  # Para compatibilidad de terminal
     ports:
       - "8888:8888"  # Para Jupyter, si lo necesitas
       - "8000:8000"
