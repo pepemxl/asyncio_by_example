@@ -1,6 +1,6 @@
+import requests
 import time
 import threading
-import requests
 
 
 def read_example() -> None:
