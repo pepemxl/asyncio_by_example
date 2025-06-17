@@ -168,11 +168,39 @@ Asyncio aprovecha que las operaciones de I/O liberan el GIL, lo caul habilita la
 
 
 
-## Concurrencia con un solo hilo
+## Sockets como ejemplo
 
-### Sockets
+Un **socket** es una abstracción de bajo nivel para enviar y recibir datos a través de una red. Es la base de la transferencia de datos hacia y desde los servidores. Los sockets admiten dos operaciones principales: **enviar** y **recibir** bytes. Escribimos bytes en un socket, que luego se envían a una dirección remota, generalmente un servidor. Una vez enviados esos bytes, esperamos a que el servidor escriba su respuesta en nuestro socket. Una vez enviados estos bytes a nuestro socket, podemos leer el resultado.
 
-Un socket es una abstracción de bajo nivel para enviar y recibir datos a través de una red. Es la base de la transferencia de datos hacia y desde los servidores. Los sockets admiten dos operaciones principales: enviar y recibir bytes. Escribimos bytes en un socket, que luego se envían a una dirección remota, generalmente un servidor. Una vez enviados esos bytes, esperamos a que el servidor escriba su respuesta en nuestro socket. Una vez enviados estos bytes a nuestro socket, podemos leer el resultado.
+
+```mermaid
+sequenceDiagram
+    participant Cliente
+    participant Servidor
+
+    Note over Cliente,Servidor: Establecimiento de conexión (TCP)
+    Cliente->>Servidor: SYN (Solicitud de conexión)
+    Servidor-->>Cliente: SYN-ACK (Confirmación + solicitud)
+    Cliente->>Servidor: ACK (Confirmación final)
+    Note over Cliente,Servidor: Conexión establecida (3-way handshake)
+
+    Note over Cliente,Servidor: Comunicación de datos
+    loop Transferencia de datos
+        Cliente->>Servidor: send() (Envía datos)
+        Servidor-->>Cliente: recv() (Recibe y procesa)
+        Servidor->>Cliente: send() (Respuesta)
+        Cliente-->>Servidor: recv() (Recibe respuesta)
+    end
+
+    Note over Cliente,Servidor: Cierre de conexión
+    Cliente->>Servidor: FIN (Cierre)
+    Servidor-->>Cliente: ACK (Confirmación)
+    Servidor->>Cliente: FIN (Cierre)
+    Cliente-->>Servidor: ACK (Confirmación final)
+    Note over Cliente,Servidor: Conexión cerrada
+```
+
+### Ejemplo del Buzón de Correo
 
 Los sockets son un concepto básico y bastante fáciles de entender si los consideramos como buzones. Podemos depositar una carta en nuestro buzón, que el cartero recoge y entrega en el buzón del destinatario. El destinatario abre su buzón y nuestra carta. Dependiendo del contenido, el destinatario podría respondernos.
 En esta analogía, podemos pensar en la carta como los datos o bytes que queremos enviar.
@@ -181,8 +209,65 @@ Consideraremos que introducir una carta en el buzón equivale a escribir los byt
 
 En el caso de obtener el contenido de www.google.com.mx, como vimos anteriormente, abrimos un socket que se conecta al servidor de www.google.com.mx. Luego, escribimos una solicitud para obtener el contenido en ese socket y esperamos a que el servidor responda con el resultado: en este caso, el HTML de la página web.
 
+Los **sockets son blockeantes por defecto**. Esto significa que, cuando esperamos la respuesta de un servidor con datos, detenemos o bloqueamos nuestra aplicación hasta que obtengamos datos para leer. Por lo tanto, nuestra aplicación deja de ejecutar cualquier otra tarea hasta que recibamos datos del servidor, se produzca un error o se agote el tiempo de espera.
+
+A nivel del sistema operativo, no necesitamos este bloqueo. Los **sockets pueden operar en modo NO bloqueante**. En este modo, cuando escribimos bytes en un socket, podemos simplemente ejecutar la escritura o lectura y olvidarnos de ella, mientras nuestra aplicación puede continuar realizando otras tareas. Posteriormente, podemos hacer que el sistema operativo nos informe de la recepción de bytes y los procese en ese momento. Esto permite que la aplicación realice diversas acciones mientras esperamos la devolución de los bytes. En lugar de bloquearnos y esperar a que lleguen los datos, nos volvemos más reactivos, permitiendo que el sistema operativo nos informe cuando hay datos sobre los que podemos actuar.
+
+En segundo plano, esto lo realizan diferentes sistemas de notificación de eventos, según el sistema operativo que estemos ejecutando. Asyncio es lo suficientemente abstracto como para alternar entre los diferentes sistemas de notificación, según cuál sea compatible con nuestro sistema operativo.
+
+Estos sistemas rastrean nuestros sockets no bloqueantes y nos notifican cuando están listos para que hagamos algo con ellos. Este sistema de notificación es la base de cómo asyncio logra la concurrencia. En el modelo de concurrencia de asyncio, solo tenemos un hilo ejecutando Python en un momento dado. Cuando realizamos una operación de I/O (Entrada/Salida), la transferimos al sistema de notificación de eventos de nuestro sistema operativo para que la registre. Una vez realizada esta transferencia, nuestro hilo de Python queda libre para seguir ejecutando otro código de Python o agregar más sockets no bloqueantes para que el sistema operativo los registre. Cuando nuestra operación de I/O finaliza, "despertamos" la tarea que esperaba el resultado y luego procedemos a ejecutar cualquier otro código de Python posterior a esa operación de I/O.
 
 
+## Como funciona un Event Loop?
 
+Un event loop (bucle de eventos) es la base de toda aplicación asyncio. Los bucles de eventos son un patrón de diseño bastante común en muchos sistemas y existen desde hace bastante tiempo. 
+
+
+El bucle de eventos más básico es extremadamente simple. Creamos una cola que contiene una lista de eventos o mensajes. Luego, realizamos un bucle indefinido, procesando los mensajes uno a uno a medida que entran en la cola. En Python, un bucle de eventos básico podría verse así:
+
+```python linenums="1"
+from collections import deque
+
+messages = deque()
+while True:
+    if messages:
+        message = messages.pop()
+        process_message(message)
+```
+
+En asyncio, el bucle de eventos mantiene una cola de tareas en lugar de mensajes. Las tareas son envoltorios de una corrutina. Una corrutina puede pausar la ejecución al alcanzar una operación de E/S y permite que el bucle de eventos ejecute otras tareas que no esperan la finalización de las operaciones de E/S.
+
+Al crear un bucle de eventos, creamos una cola vacía de tareas. A continuación, podemos añadir tareas a la cola para su ejecución. Cada iteración del bucle de eventos comprueba las tareas que deben ejecutarse y las ejecuta una a una hasta que una tarea alcanza una operación de E/S. En ese momento, la tarea se pausa y le indicamos al sistema operativo que vigile los sockets para ver si se completa la E/S. A continuación, buscamos la siguiente tarea que se ejecutará. En cada iteración del bucle de eventos, comprobamos si alguna de nuestras E/S se ha completado; si es así, reactivamos las tareas pausadas y dejamos que finalicen su ejecución. 
+
+Para ilustrar esto, imaginemos tres tareas que realizan una solicitud web asíncrona. Imaginemos que estas tareas tienen un fragmento de código de configuración, que está limitado por la CPU, luego realizan una solicitud web y, a continuación, un código de posprocesamiento limitado por la CPU. Ahora, enviemos estas tareas al bucle de eventos simultáneamente. En pseudocódigo, escribiríamos algo como esto:
+
+```python
+def make_request():
+    cpu_bound_setup()
+    io_bound_web_request()
+    cpu_bound_postprocess()
+
+task_one = make_request()
+task_two = make_request()
+task_three = make_request()
+```
+
+Al mandar llamar estas tres tareas de manera asyncrona.
+
+
+1. Corre `task_one` su parte cpu_bound.
+    - `task_two` espera iniciar
+    - `task_three` espera iniciar
+2. Al llegar a la parte io_bound de `task_one`
+    - `task_one` espera terminación de I/O
+    - `task_two` inicia su parte cpu_bound
+    - `task_three` espera iniciar
+3. Al llegar a la parte io_bound de `task_two`
+    - `task_two` espera terminación de I/O
+    - `task_one` revisa si ya termino su parte io_bound 
+        - si termino, continue con el resto cpu_bound
+        - si no, espera
+    - `task_three` inicia su parte cpu_bound
+4. Las tareas continuan hasta terminar.
 
 
