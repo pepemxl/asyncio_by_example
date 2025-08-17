@@ -25,6 +25,9 @@ nav:
     - "Sección 2 Procesos e Hilos": 'module_01/section_02.md'
     - "Sección 3 Ejemplos de Asyncio": 'module_01/section_03.md'
     - "Sección 4 Gevent": 'module_01/section_04.md'
+  - "Módulo 14":
+    - "Sección 1 Topicos avanzados de Asyncio": 'module_14/section_01.md'
+    - "Sección 2 Topicos avanzados de Gevent": 'module_14/section_02.md'
 plugins:
   - search
   - mermaid2
