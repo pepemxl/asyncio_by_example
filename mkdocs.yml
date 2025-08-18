@@ -21,10 +21,20 @@ theme:
 nav:
   - Inicio: 'index.md'
   - "Módulo 1":
-    - "Sección 1 ¿Qué es asyncio?": 'module_01/section_01.md'
-    - "Sección 2 Procesos e Hilos": 'module_01/section_02.md'
-    - "Sección 3 Ejemplos de Asyncio": 'module_01/section_03.md'
-    - "Sección 4 Gevent": 'module_01/section_04.md'
+    - "¿Qué es asyncio?": 'module_01/section_01.md'
+    - "Procesos e Hilos": 'module_01/section_02.md'
+    - "Ejemplos de Asyncio": 'module_01/section_03.md'
+    - "Gevent": 'module_01/section_04.md'
+  - "Módulo 2":
+    - "Introducción a Corutinas": 'module_02/section_01.md'
+    - "Corutinas de larga duración": 'module_02/section_02.md'
+    - "Tareas Concurrentes": 'module_02/section_03.md'
+    - "Cancelación de tareas y timeouts": 'module_02/section_04.md'
+    - "Tasks, coroutines, futures y awaitables": 'module_02/section_05.md'
+    - "Midiendo el tiempo de ejecución": 'module_02/section_06.md'
+    - "Pitfalls": 'module_02/section_07.md'
+    - "Acceso y manejo del event loop": 'module_02/section_08.md'
+    - "Modeo Debug": 'module_02/section_09.md'
   - "Módulo 14":
     - "Sección 1 Topicos avanzados de Asyncio": 'module_14/section_01.md'
     - "Sección 2 Topicos avanzados de Gevent": 'module_14/section_02.md'

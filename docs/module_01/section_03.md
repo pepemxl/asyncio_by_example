@@ -1,5 +1,27 @@
 # Ejemplos de Asyncio
 
+## Hello World
+
+Crearemos una corutina que correra de manera asincrona `src/capitulo_01/section_01/intro.py`
+
+```python title="Hello World con Asyncio" linenums="1"
+import asyncio
+
+async def greeting_async() -> str:
+    """
+    Simple ejemplo de función asincrona
+    """
+    await asyncio.sleep(1)  # Simulamos una tarea asincrona I/O
+    return "Hello World!"
+
+async def main() -> None:
+    result = await greeting_async()
+    print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
 ## **Ejemplo de asyncio vs serial**
 
 Podemos ver como en el siguiente código el tiempo utilizado en la versicón asincrónica es alrededor de 2 segundos, mientras que su version serial le toma alrededor de 4 segundos!
