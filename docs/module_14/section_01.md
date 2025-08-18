@@ -87,5 +87,7 @@ asyncio.run(main())
 Las librerías modernas como `aiohttp` para HTTP o `asyncpg` para PostgreSQL proporcionan APIs nativas para asyncio que son preferibles a adaptar librerías bloqueantes.
 
 
+## Event Loop
 
+Un bucle de eventos no puede interrumpir forzosamente una corrutina en ejecución. Una corrutina en ejecución continuará hasta ceder(yield) el control. El bucle de eventos sirve para seleccionar la corrutina que se programará a continuación y registra las corrutinas bloqueadas que no pueden ejecutarse hasta que se complete alguna operación de E/S. Sin embargo, solo realiza estas acciones cuando no hay ninguna corrutina en ejecución.
 
