@@ -28,10 +28,10 @@ print(f"El resultado serial es {function_result} y su tipo es {type(function_res
 print(f"El resultado de la corutina es {coroutine_result} y su tipo es {type(coroutine_result)}")
 ```
 
-```bash title="Salida"
+```bash title="Salida" hl_lines="3"
 El resultado serial es 2 y su tipo es <class 'int'>
 El resultado de la corutina es <coroutine object coroutine_add_one at 0x76f7f8f362c0> y su tipo es <class 'coroutine'>
-sys:1: RuntimeWarning: coroutine 'coroutine_add_one' was never awaited
+sys:1: RuntimeWarning: coroutine 'coroutine_add_one' was never awaited # (warning)
 ```
 
 Observemos cómo, al llamar a nuestra función normal `add_one`, esta se ejecuta inmediatamente y devuelve lo que esperaríamos: otro entero. Sin embargo, al llamar a `coroutine_add_one`, el código de la corrutina no se ejecuta. En su lugar, se obtiene un objeto de corrutina.
