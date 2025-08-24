@@ -156,6 +156,78 @@ La función <function main at 0x735c060965c0> termino en 0.3255 segundo(s)
 No obtuvimos ninguna ventaja de la concurrencia!
 
 
+```python title="Ejemplo con sync timer" linenums="1"
+import asyncio
+from util.async_timer import async_timed
+from util.delay_functions import delay
+from util.sync_timed import sync_timed
+
+@async_timed()
+async def cpu_bound_work(task_id) -> int:
+    counter = 0
+    for i in range(100000000):
+        counter = counter + 1
+    return counter
 
 
+async def test_01() -> None:
+    print("---Empezando test 01---")
+    task_one = asyncio.create_task(cpu_bound_work(task_id=1))
+    await task_one
+    print("-----------------------")
 
+async def test_02() -> None:
+    print("Empezando test 02")
+    task_delay = asyncio.create_task(delay(5,1))
+    task_one = asyncio.create_task(cpu_bound_work(task_id=2))
+    task_two = asyncio.create_task(cpu_bound_work(task_id=3))
+    await task_one
+    await task_two
+    await task_delay
+    print("-----------------------")
+
+async def test_03() -> None:
+    print("Empezando test 03")
+    task_one = asyncio.create_task(cpu_bound_work(task_id=1))
+    task_two = asyncio.create_task(cpu_bound_work(task_id=2))
+    task_delay = asyncio.create_task(delay(5,3))
+    await task_one
+    await task_two
+    await task_delay
+    print("-----------------------")
+
+@sync_timed()
+def main() -> None:
+    asyncio.run(test_01())
+    asyncio.run(test_02())
+    asyncio.run(test_03())
+
+
+if __name__ == '__main__':
+    main()
+```
+
+```bash title="Salida"
+Empezando función sincrona <function main at 0x7e478686b560> con args () {}
+---Empezando test 01---
+Empezando función <function cpu_bound_work at 0x7e4786830fe0> con args () {'task_id': 1}
+La función <function cpu_bound_work at 0x7e4786830fe0> termino en 1.8737 segundo(s)
+-----------------------
+Empezando test 02
+Task 1 Durmiendo por 5 segundo(s)
+Empezando función <function cpu_bound_work at 0x7e4786830fe0> con args () {'task_id': 2}
+La función <function cpu_bound_work at 0x7e4786830fe0> termino en 1.8369 segundo(s)
+Empezando función <function cpu_bound_work at 0x7e4786830fe0> con args () {'task_id': 3}
+La función <function cpu_bound_work at 0x7e4786830fe0> termino en 1.8190 segundo(s)
+Task 1 Termino la funcion dormir por 5 segundo(s)
+-----------------------
+Empezando test 03
+Empezando función <function cpu_bound_work at 0x7e4786830fe0> con args () {'task_id': 1}
+La función <function cpu_bound_work at 0x7e4786830fe0> termino en 1.7980 segundo(s)
+Empezando función <function cpu_bound_work at 0x7e4786830fe0> con args () {'task_id': 2}
+La función <function cpu_bound_work at 0x7e4786830fe0> termino en 1.7814 segundo(s)
+Task 3 Durmiendo por 5 segundo(s)
+Task 3 Termino la funcion dormir por 5 segundo(s)
+-----------------------
+La función sincrona <function main at 0x7e478686b560> termino en 15.4637 segundo(s)
+```
