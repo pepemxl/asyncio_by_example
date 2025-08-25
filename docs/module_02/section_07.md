@@ -10,7 +10,11 @@ Podemos tener funciones que realizan cálculos computacionalmente costosos, como
 En teoría, esto es era una buena idea, pero recordemos que asyncio tiene un modelo de concurrencia de **UN solo hilo**. Esto significa que aún estamos sujetos a las limitaciones de un solo hilo y del bloqueo global del intérprete.
 
 
-```python title="Ejemplo" linenums="1"
+## Ejemplo con un task CPU Bound
+
+El siguiente ejemplo son dos tasks que son CPU bound dentro de una corutina.
+
+```python title="Ejemplo CPU Bound" linenums="1"
 import asyncio
 from util import delay
 
@@ -31,6 +35,7 @@ async def main():
 asyncio.run(main())
 ```
 
+Como era de esperarse el tiempo de realizar ambas tareas es el mismo que de haber hecho esta tarea de manera serial.
 
 ```bash title="Salida"
 Empezando función <function main at 0x712866d6f1a0> con args () {}
@@ -46,7 +51,9 @@ Podríamos pensar que no hay inconvenientes en usar `async` y `await` en todo nu
 Consideremos la posibilidad de crear dos tareas limitadas por la CPU junto con una tarea de larga duración, como nuestra corrutina de retardo.
 
 
-```python title="Ejemplo" linenums="1"
+## Ejemplo mezclando CPU bound task con I/O Bound task
+
+```python title="Ejemplo CPU Bound + I/O Bound" linenums="1"
 import asyncio
 from util import async_timed, delay
 
@@ -77,6 +84,8 @@ Durmiendo por 4 segundo(s)
 Termino la funcion dormir por 4 segundo(s)
 La función <function main at 0x75abfc86f240> termino en 7.5586 segundo(s)
 ```
+
+## Ejemplo mezclado CPU bound tasj con I/O bound task donde el orden importa
 
 Pequeñas variaciones del codigo pueden provocar comportamientos distintos
 
@@ -113,9 +122,11 @@ Termino la funcion dormir por 4 segundo(s)
 La función <function main at 0x7afa8c373240> termino en 4.0028 segundo(s)
 ```
 
-
 Este ejemplo muestra como la creación del task literalmente afecta el comportamiento.
+Donde haber encolado la tarea que es I/O nos ayudo realmente a empezar a trabajar dicha tarea, y para cuando acabaron las tareas CPU bound dicha tarea termino.
 
+
+## Ejemplo con librerias bloqueantes
 
 También podríamos vernos tentados a usar nuestras bibliotecas existentes para operaciones de E/S envolviéndolas en corrutinas. Sin embargo, esto generará los mismos problemas que vimos con las operaciones de CPU. Estas API bloquean el hilo principal. Por lo tanto, al ejecutar una llamada a la API de bloqueo dentro de una corrutina, bloqueamos el propio hilo del bucle de eventos, lo que significa que detenemos la ejecución de otras corrutinas o tareas.
 
@@ -154,6 +165,61 @@ La función <function main at 0x735c060965c0> termino en 0.3255 segundo(s)
 ```
 
 No obtuvimos ninguna ventaja de la concurrencia!
+
+
+## Ejemplo de CPU bound a I/O bound
+
+se nos podría ocurrir la siguiente idea, por que no volver cooperativa una tarea CPU bound.
+
+```python title="Ejemplo con sync timer" linenums="1"
+import asyncio
+from util.async_timer import async_timed
+
+
+@async_timed()
+async def cpu_bound_work() -> int:
+    counter = 0
+    for i in range(100000000):
+        counter = counter + 1
+    return counter
+
+@async_timed()
+async def cpu_bound_work_awaitable() -> int:
+    counter = 0
+    async def add_counter():
+        nonlocal counter
+        counter = counter + 1
+    for i in range(100000000):
+        await add_counter()
+    return counter
+
+@async_timed()
+async def main():
+    task_one = asyncio.create_task(cpu_bound_work())
+    task_two = asyncio.create_task(cpu_bound_work_awaitable())
+    await task_one
+    await task_two
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
+```
+
+```bash title="Salida"
+Empezando función <function main at 0x71ecec173380> con args () {}
+Empezando función <function cpu_bound_work at 0x71ececaf5440> con args () {}
+La función <function cpu_bound_work at 0x71ececaf5440> termino en 1.9740 segundo(s)
+Empezando función <function cpu_bound_work_awaitable at 0x71ecec173240> con args () {}
+La función <function cpu_bound_work_awaitable at 0x71ecec173240> termino en 9.7383 segundo(s)
+La función <function main at 0x71ecec173380> termino en 11.7125 segundo(s)
+```
+
+Como podemos ver volver esperable una tarea CPU bound se volvio contraproducente, incrementando el tiempo de aproximadamente 2 segundos a casi 12 segundos para la misma tarea!
+
+
+## Ejemplo con un timer sync
+
+### Task I/O bound con tiempo mayor al Task CPU bound
 
 
 ```python title="Ejemplo con sync timer" linenums="1"
@@ -231,3 +297,40 @@ Task 3 Termino la funcion dormir por 5 segundo(s)
 -----------------------
 La función sincrona <function main at 0x7e478686b560> termino en 15.4637 segundo(s)
 ```
+
+### Task I/O bound con tiempo similar a Task CPU bound
+
+Ahora reduzcamos el tiempo de ejecución de delay a 2 segundos que es approximadamente lo que tarda la tarea `cpu_bound`.
+
+Con ello obtenemos la siguiente salida
+
+```bash title="Ejemplo cambiando a 2 segundos"
+Empezando función sincrona <function main at 0x7997b8663560> con args () {}
+---Empezando test 01---
+Empezando función <function cpu_bound_work at 0x7997b8628fe0> con args () {'task_id': 1}
+La función <function cpu_bound_work at 0x7997b8628fe0> termino en 1.8079 segundo(s)
+-----------------------
+Empezando test 02
+Task 1 Durmiendo por 2 segundo(s)
+Empezando función <function cpu_bound_work at 0x7997b8628fe0> con args () {'task_id': 2}
+La función <function cpu_bound_work at 0x7997b8628fe0> termino en 1.8219 segundo(s)
+Empezando función <function cpu_bound_work at 0x7997b8628fe0> con args () {'task_id': 3}
+La función <function cpu_bound_work at 0x7997b8628fe0> termino en 1.8353 segundo(s)
+Task 1 Termino la funcion dormir por 2 segundo(s)
+-----------------------
+Empezando test 03
+Empezando función <function cpu_bound_work at 0x7997b8628fe0> con args () {'task_id': 1}
+La función <function cpu_bound_work at 0x7997b8628fe0> termino en 1.8370 segundo(s)
+Empezando función <function cpu_bound_work at 0x7997b8628fe0> con args () {'task_id': 2}
+La función <function cpu_bound_work at 0x7997b8628fe0> termino en 1.8337 segundo(s)
+Task 3 Durmiendo por 2 segundo(s)
+Task 3 Termino la funcion dormir por 2 segundo(s)
+-----------------------
+La función sincrona <function main at 0x7997b8663560> termino en 11.1424 segundo(s)
+```
+
+Si las tareas fueran cooperativas las tres tareas tomarian alrededor de 6 segundos. Sin embargo, 
+estan tomando 11 segundos.
+
+
+
