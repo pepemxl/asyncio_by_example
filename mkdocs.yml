@@ -35,6 +35,10 @@ nav:
     - "Pitfalls": 'module_02/section_07.md'
     - "Acceso y manejo del event loop": 'module_02/section_08.md'
     - "Modeo Debug": 'module_02/section_09.md'
+  - "Módulo 3":
+    - "Sockets Bloqueantes": 'module_03/section_01.md'
+    - "Sockerts NO Bloqueantes": 'module_03/section_02.md'
+    - "Construir un socket event loop": 'module_03/section_03.md'
   - "Módulo 14":
     - "Sección 1 Topicos avanzados de Asyncio": 'module_14/section_01.md'
     - "Sección 2 Topicos avanzados de Gevent": 'module_14/section_02.md'
